@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Formulario de atención</title>
+  <style>
+    :root { --bg: #ffffff; --fg: #1f2937; --muted: #6b7280; --accent: #e30613; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #111827; --fg: #f3f4f6; --muted: #9ca3af; } }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center; padding: 24px 16px; box-sizing: border-box; }
+    .spinner { width: 36px; height: 36px; border: 4px solid #e5e7eb; border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.9s linear infinite; margin-bottom: 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    p { margin: 4px 0; } .muted { color: var(--muted); font-size: 14px; }
+    button { margin-top: 16px; padding: 12px 20px; border: 0; border-radius: 8px;
+      background: var(--accent); color: #fff; font-size: 16px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="spinner" id="spinner"></div>
+    <p id="status">Abriendo el formulario…</p>
+    <p class="muted" id="hint">Esto toma solo unos segundos.</p>
+    <button id="retry" type="button">Abrir formulario</button>
+  </div>
+
+  <script>
+    // ============ CONFIGURACIÓN (copiar desde Admin > Mensajería > Implementaciones de Messenger) ============
+    var GENESYS_SCRIPT_URL = 'https://apps.mypurecloud.com/genesys-bootstrap/genesys.min.js'; // depende de la región
+    var GENESYS_ENVIRONMENT = 'prod';                                                       // ej. 'prod-sae1' para São Paulo
+    var GENESYS_DEPLOYMENT_ID = 'REEMPLAZAR-CON-DEPLOYMENT-ID';
+
+    // Parámetros de la URL que se aceptan y con qué nombre llegan a Architect (Get Participant Data).
+    // Solo se copian estos; cualquier otro parámetro se ignora.
+    var PARAMS = { c: 'waConversationId', n: 'nombre', m: 'motivo', o: 'origen' };
+    // ==========================================================================================================
+
+    var attrs = { origen: 'whatsapp' };
+    var query = new URLSearchParams(window.location.search);
+    Object.keys(PARAMS).forEach(function (key) {
+      var value = query.get(key);
+      if (value) attrs[PARAMS[key]] = value.slice(0, 200);
+    });
+    // Saca los parámetros de la barra de direcciones/historial una vez leídos.
+    if (window.location.search) {
+      history.replaceState(null, '', window.location.pathname);
+    }
+
+    (function (g, e, n, es, ys) {
+      g['_genesysJs'] = e;
+      g[e] = g[e] || function () { (g[e].q = g[e].q || []).push(arguments); };
+      g[e].t = 1 * new Date();
+      g[e].c = es;
+      ys = document.createElement('script'); ys.async = 1; ys.src = n; ys.charset = 'utf-8';
+      ys.onerror = showError;
+      document.head.appendChild(ys);
+    })(window, 'Genesys', GENESYS_SCRIPT_URL, {
+      environment: GENESYS_ENVIRONMENT,
+      deploymentId: GENESYS_DEPLOYMENT_ID
+    });
+
+    // Los atributos tienen que estar cargados ANTES de que arranque la conversación.
+    Genesys('command', 'Database.set', { messaging: { customAttributes: attrs } });
+
+    var messengerReady = false;
+    Genesys('subscribe', 'Messenger.ready', function () {
+      messengerReady = true;
+      openMessenger();
+    });
+
+    function openMessenger() {
+      Genesys('command', 'Messenger.open', {},
+        function () {
+          document.getElementById('spinner').style.display = 'none';
+          document.getElementById('status').textContent = 'Formulario abierto.';
+          document.getElementById('hint').textContent = 'Si lo cerraste, tocá el botón para volver a abrirlo.';
+          document.getElementById('retry').style.display = 'inline-block';
+        },
+        function () { /* ya estaba abierto */ }
+      );
+    }
+
+    function showError() {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('status').textContent = 'No pudimos abrir el formulario.';
+      document.getElementById('hint').textContent = 'Volvé a WhatsApp y escribinos de nuevo.';
+    }
+
+    document.getElementById('retry').addEventListener('click', openMessenger);
+    setTimeout(function () { if (!messengerReady) showError(); }, 15000);
+  </script>
+</body>
+</html>
