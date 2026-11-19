@@ -79,12 +79,18 @@
     Genesys('subscribe', 'Messenger.ready', function () {
       messengerReady = true;
       if (!linkNuevo) { openMessenger(); return; }
-      // Borra la conversación guardada (si no hay ninguna, falla y seguimos igual), recarga los atributos y abre.
+      // Borra la conversación guardada, recarga los atributos y abre. Genesys no siempre responde a
+      // clearConversation (por ejemplo si no había conversación), así que se abre igual a los 1,5 s.
+      var abierto = false;
       var seguir = function () {
+        if (abierto) return;
+        abierto = true;
         Genesys('command', 'Database.set', { messaging: { customAttributes: attrs } });
         openMessenger();
       };
+      Genesys('subscribe', 'MessagingService.conversationCleared', seguir);
       Genesys('command', 'MessagingService.clearConversation', {}, seguir, seguir);
+      setTimeout(seguir, 1500);
     });
 
     function openMessenger() {
