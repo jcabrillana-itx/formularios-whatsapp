@@ -48,6 +48,8 @@
 
     var attrs = { origen: 'whatsapp' };
     var query = new URLSearchParams(window.location.search);
+    // Link nuevo desde WhatsApp: hay que empezar una conversación nueva, no retomar la anterior.
+    var linkNuevo = !!window.location.search;
     Object.keys(PARAMS).forEach(function (key) {
       var value = query.get(key);
       if (value) attrs[PARAMS[key]] = value.slice(0, 200);
@@ -76,7 +78,13 @@
     var messengerReady = false;
     Genesys('subscribe', 'Messenger.ready', function () {
       messengerReady = true;
-      openMessenger();
+      if (!linkNuevo) { openMessenger(); return; }
+      // Borra la conversación guardada (si no hay ninguna, falla y seguimos igual), recarga los atributos y abre.
+      var seguir = function () {
+        Genesys('command', 'Database.set', { messaging: { customAttributes: attrs } });
+        openMessenger();
+      };
+      Genesys('command', 'MessagingService.clearConversation', {}, seguir, seguir);
     });
 
     function openMessenger() {
