@@ -16,8 +16,9 @@
       border-radius: 50%; animation: spin 0.9s linear infinite; margin-bottom: 16px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     p { margin: 4px 0; } .muted { color: var(--muted); font-size: 14px; }
-    button { margin-top: 16px; padding: 12px 20px; border: 0; border-radius: 8px;
-      background: var(--accent); color: #fff; font-size: 16px; display: none; }
+    button, .btn { margin-top: 16px; padding: 12px 20px; border: 0; border-radius: 8px;
+      background: var(--accent); color: #fff; font-size: 16px; display: none; text-decoration: none; }
+    .btn.wa { background: #25d366; }
   </style>
 </head>
 <body>
@@ -26,6 +27,7 @@
     <p id="status">Abriendo el formulario…</p>
     <p class="muted" id="hint">Esto toma solo unos segundos.</p>
     <button id="retry" type="button">Abrir formulario</button>
+    <a id="back" class="btn wa" href="#">Volver a WhatsApp</a>
   </div>
 
   <script>
@@ -37,6 +39,11 @@
     // Parámetros de la URL que se aceptan y con qué nombre llegan a Architect (Get Participant Data).
     // Solo se copian estos; cualquier otro parámetro se ignora.
     var PARAMS = { c: 'waConversationId', n: 'nombre', m: 'motivo', o: 'origen' };
+
+    // Número de WhatsApp de la empresa (solo dígitos, con código de país) para volver al chat al terminar.
+    // Vacío: se intenta cerrar la pestaña y, si el navegador no lo permite, se indica volver a WhatsApp.
+    var WHATSAPP_NUMERO = '';
+    var SEGUNDOS_PARA_VOLVER = 4;
     // ==========================================================================================================
 
     var attrs = { origen: 'whatsapp' };
@@ -82,6 +89,35 @@
         },
         function () { /* ya estaba abierto */ }
       );
+    }
+
+    // Cuando el flujo de Architect desconecta la conversación (formulario terminado): cerrar el webchat,
+    // limpiar la sesión para que el próximo link empiece de cero y volver a WhatsApp.
+    var finished = false;
+    Genesys('subscribe', 'MessagingService.conversationDisconnected', function () {
+      if (finished) return;
+      finished = true;
+      setTimeout(function () {
+        Genesys('command', 'Messenger.close', {}, function () {}, function () {});
+        Genesys('command', 'MessagingService.clearConversation', {}, function () {}, function () {});
+        showFinished();
+      }, 2500); // deja leer el último mensaje del bot
+    });
+
+    function showFinished() {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('retry').style.display = 'none';
+      document.getElementById('status').textContent = '✅ ¡Listo! Recibimos tu solicitud.';
+      var back = document.getElementById('back');
+      if (WHATSAPP_NUMERO) {
+        back.href = 'https://wa.me/' + WHATSAPP_NUMERO;
+        back.style.display = 'inline-block';
+        document.getElementById('hint').textContent = 'Te llevamos de vuelta a WhatsApp…';
+        setTimeout(function () { window.location.href = back.href; }, SEGUNDOS_PARA_VOLVER * 1000);
+      } else {
+        document.getElementById('hint').textContent = 'Ya podés cerrar esta ventana y volver a WhatsApp.';
+        setTimeout(function () { window.close(); }, SEGUNDOS_PARA_VOLVER * 1000);
+      }
     }
 
     function showError() {
